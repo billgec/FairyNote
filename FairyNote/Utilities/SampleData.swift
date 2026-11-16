@@ -1,4 +1,5 @@
 #if DEBUG
+import Foundation
 import SwiftData
 
 /// Beispielinhalte für Screenshots im Simulator. Start mit dem Argument `-sampleData`.
