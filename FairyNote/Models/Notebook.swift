@@ -8,6 +8,7 @@ final class Notebook {
     var modifiedAt: Date = Date()
     var coverColorHex: String = "#FF5A3C"
     var paperStyleRaw: String = PaperStyle.lined.rawValue
+    var paperColorRaw: String = PaperColor.theme.rawValue
     var folder: Folder?
     /// Importiertes PDF, dessen Seiten als Hintergrund dienen (siehe `Page.pdfPageIndex`).
     @Attribute(.externalStorage) var backgroundPDF: Data?
@@ -18,13 +19,20 @@ final class Notebook {
         set { paperStyleRaw = newValue.rawValue; touch() }
     }
 
+    var paperColor: PaperColor {
+        get { PaperColor(rawValue: paperColorRaw) ?? .theme }
+        set { paperColorRaw = newValue.rawValue; touch() }
+    }
+
     var sortedPages: [Page] {
         (pages ?? []).sorted { $0.index < $1.index }
     }
 
-    init(title: String, paperStyle: PaperStyle = .lined, coverColorHex: String = "#FF5A3C", folder: Folder? = nil) {
+    init(title: String, paperStyle: PaperStyle = .lined, paperColor: PaperColor = .theme,
+         coverColorHex: String = "#FF5A3C", folder: Folder? = nil) {
         self.title = title
         self.paperStyleRaw = paperStyle.rawValue
+        self.paperColorRaw = paperColor.rawValue
         self.coverColorHex = coverColorHex
         self.folder = folder
     }
