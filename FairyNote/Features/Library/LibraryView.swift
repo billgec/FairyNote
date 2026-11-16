@@ -26,6 +26,11 @@ struct LibraryView: View {
     @State private var deleteTarget: DeleteTarget?
     @State private var isDeleting = false
 
+    // Import / Export
+    @State private var showImporter = false
+    @State private var shareItem: ShareItem?
+    @State private var transferError: String?
+
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 24)]
 
     var body: some View {
@@ -54,6 +59,22 @@ struct LibraryView: View {
             Button("Löschen", role: .destructive) { delete(target) }
         } message: { target in
             Text(target.message)
+        }
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: NotebookImporter.importableTypes,
+                      allowsMultipleSelection: true) { result in
+            switch result {
+            case .success(let urls): importFiles(urls)
+            case .failure(let error): transferError = error.localizedDescription
+            }
+        }
+        // Dateien, die über „Teilen › FairyNote“ (z. B. aus GoodNotes oder Dateien) geöffnet werden.
+        .onOpenURL { importFiles([$0]) }
+        .sheet(item: $shareItem) { ShareSheet(url: $0.url) }
+        .alert("Import/Export", isPresented: Binding(get: { transferError != nil },
+                                                     set: { if !$0 { transferError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(transferError ?? "")
         }
     }
 
@@ -145,6 +166,7 @@ struct LibraryView: View {
         }
         .navigationTitle(currentFolder?.name ?? "Alle Notizbücher")
         .toolbar {
+            Button("Importieren", systemImage: "square.and.arrow.down") { showImporter = true }
             Button("Neues Notizbuch", systemImage: "plus") { showNewNotebook = true }
         }
     }
@@ -168,6 +190,11 @@ struct LibraryView: View {
                 }
             }
         }
+        Menu("Exportieren", systemImage: "square.and.arrow.up") {
+            ForEach(ExportFormat.allCases) { format in
+                Button(format.title, systemImage: format.systemImage) { export(notebook, as: format) }
+            }
+        }
         Divider()
         Button("Löschen", systemImage: "trash", role: .destructive) {
             confirmDelete(.notebook(notebook))
@@ -182,6 +209,33 @@ struct LibraryView: View {
         notebook.addPage()
         save()
         path.append(notebook)
+    }
+
+    private func importFiles(_ urls: [URL]) {
+        var imported: [Notebook] = []
+        var errors: [String] = []
+        for url in urls {
+            do {
+                imported.append(try NotebookImporter.importFile(at: url, into: context, folder: currentFolder))
+            } catch {
+                errors.append("\(url.lastPathComponent): \(error.localizedDescription)")
+            }
+        }
+        if !errors.isEmpty { transferError = errors.joined(separator: "\n\n") }
+        // Ein einzelnes Notizbuch direkt öffnen.
+        if imported.count == 1, errors.isEmpty {
+            path = NavigationPath()
+            path.append(imported[0])
+        }
+    }
+
+    private func export(_ notebook: Notebook, as format: ExportFormat) {
+        save()
+        do {
+            shareItem = ShareItem(url: try NotebookExporter.export(notebook, as: format))
+        } catch {
+            transferError = error.localizedDescription
+        }
     }
 
     private func move(_ notebook: Notebook, to folder: Folder?) {
