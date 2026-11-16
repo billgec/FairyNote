@@ -31,7 +31,7 @@ final class ToolState {
 
     enum EraserMode: String { case stroke, pixel }
 
-    static let penColors = ["#1C1C1E", "#2B4FC2", "#D23B3B", "#2E8B57", "#7A5CFA", "#F08A24"]
+    static let penColors = ["#141414", "#2F5BEA", "#FF5A3C", "#0F7B6C", "#8E5BD9", "#C98A1B"]
     static let markerColors = ["#FFE14D", "#9BE564", "#FF8FC7", "#7CC7FF", "#FFB25B"]
     static let penWidths: [CGFloat] = [1.5, 3, 6]
     static let markerWidths: [CGFloat] = [10, 18, 28]

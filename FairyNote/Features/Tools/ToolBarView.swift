@@ -58,8 +58,8 @@ struct ToolBarView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.bar)
-        .overlay(alignment: .bottom) { Divider() }
+        .background(Theme.paper)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline).frame(height: 1) }
         .animation(.snappy(duration: 0.2), value: tools.kind)
     }
 
@@ -83,8 +83,8 @@ private struct ToolButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 18, weight: .medium))
                 .frame(width: 40, height: 36)
-                .background(isSelected ? Color.accentColor.opacity(0.18) : .clear,
-                            in: RoundedRectangle(cornerRadius: 8))
+                .background(isSelected ? Theme.desk : .clear,
+                            in: RoundedRectangle(cornerRadius: 6))
                 .foregroundStyle(isSelected ? Color.accentColor : .primary)
         }
         .buttonStyle(.plain)
@@ -105,7 +105,7 @@ private struct ColorDot: View {
                 .frame(width: 24, height: 24)
                 .overlay(Circle().strokeBorder(.black.opacity(0.15), lineWidth: 1))
                 .padding(3)
-                .overlay(Circle().strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2))
+                .overlay(Circle().strokeBorder(isSelected ? Color.primary : .clear, lineWidth: 2))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Farbe \(hex)")
@@ -122,8 +122,8 @@ private struct WidthButton: View {
             Capsule()
                 .frame(width: 18, height: CGFloat(2 + level * 3))
                 .frame(width: 36, height: 36)
-                .background(isSelected ? Color.accentColor.opacity(0.18) : .clear,
-                            in: RoundedRectangle(cornerRadius: 8))
+                .background(isSelected ? Theme.desk : .clear,
+                            in: RoundedRectangle(cornerRadius: 6))
                 .foregroundStyle(isSelected ? Color.accentColor : .primary)
         }
         .buttonStyle(.plain)

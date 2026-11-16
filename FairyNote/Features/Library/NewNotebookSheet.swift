@@ -32,12 +32,13 @@ struct NewNotebookSheet: View {
                         ForEach(Notebook.coverColors, id: \.self) { hex in
                             Button { color = hex } label: {
                                 Circle()
-                                    .fill(Color(hex: hex).gradient)
+                                    .fill(Color(hex: hex))
                                     .frame(width: 34, height: 34)
                                     .padding(3)
                                     .overlay(Circle().strokeBorder(color == hex ? Color.accentColor : .clear, lineWidth: 2))
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Theme.coverName(hex))
                         }
                     }
                 }

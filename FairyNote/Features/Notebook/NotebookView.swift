@@ -19,7 +19,7 @@ struct NotebookView: View {
                         }
                         .aspectRatio(PageView.aspectRatio, contentMode: .fit)
                         .frame(maxWidth: 900)
-                        .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+                        .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
 
                         pageFooter(page)
                     }
@@ -28,7 +28,7 @@ struct NotebookView: View {
             .padding(32)
         }
         .scrollDismissesKeyboard(.immediately)
-        .background(Color(.secondarySystemBackground))
+        .background(Theme.desk)
         .safeAreaInset(edge: .top, spacing: 0) { ToolBarView(tools: tools) }
         .navigationTitle($notebook.title)
         .navigationBarTitleDisplayMode(.inline)

@@ -3,12 +3,12 @@ import SwiftData
 
 @Model
 final class Notebook {
-    static let coverColors = ["#7A5CFA", "#E5677A", "#F2A541", "#4CAF8E", "#3E8ED0", "#5B6770"]
+    static let coverColors = Theme.covers.map(\.hex)
 
     var title: String = ""
     var createdAt: Date = Date()
     var modifiedAt: Date = Date()
-    var coverColorHex: String = "#7A5CFA"
+    var coverColorHex: String = "#FF5A3C"
     var paperStyleRaw: String = PaperStyle.lined.rawValue
     var folder: Folder?
     @Relationship(deleteRule: .cascade, inverse: \Page.notebook) var pages: [Page]? = []
@@ -22,7 +22,7 @@ final class Notebook {
         (pages ?? []).sorted { $0.index < $1.index }
     }
 
-    init(title: String, paperStyle: PaperStyle = .lined, coverColorHex: String = "#7A5CFA", folder: Folder? = nil) {
+    init(title: String, paperStyle: PaperStyle = .lined, coverColorHex: String = "#FF5A3C", folder: Folder? = nil) {
         self.title = title
         self.paperStyleRaw = paperStyle.rawValue
         self.coverColorHex = coverColorHex
