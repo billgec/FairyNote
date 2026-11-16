@@ -14,6 +14,9 @@ struct FairyNoteApp: App {
         } catch {
             fatalError("Datenbank konnte nicht geöffnet werden: \(error)")
         }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-sampleData") { SampleData.insert(into: container.mainContext) }
+        #endif
     }
 
     var body: some Scene {
