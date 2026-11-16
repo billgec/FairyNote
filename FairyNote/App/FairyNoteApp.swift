@@ -4,6 +4,7 @@ import SwiftData
 @main
 struct FairyNoteApp: App {
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(AppTheme.storageKey) private var themeID = AppTheme.standard.id
     private let container: ModelContainer
 
     init() {
@@ -17,7 +18,11 @@ struct FairyNoteApp: App {
 
     var body: some Scene {
         WindowGroup {
+            let theme = AppTheme.named(themeID)
             LibraryView()
+                .environment(\.theme, theme)
+                .tint(theme.accent)
+                .preferredColorScheme(theme.scheme)
         }
         .modelContainer(container)
         .onChange(of: scenePhase) { _, phase in
