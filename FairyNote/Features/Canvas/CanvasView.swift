@@ -29,7 +29,9 @@ struct CanvasView: UIViewRepresentable {
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: CanvasView
-        let toolPicker = PKToolPicker()
+        // Ein gemeinsamer Tool-Picker für alle Seiten, damit Stiftauswahl seitenübergreifend gilt.
+        static let toolPicker = PKToolPicker()
+        var toolPicker: PKToolPicker { Self.toolPicker }
 
         init(_ parent: CanvasView) { self.parent = parent }
 
