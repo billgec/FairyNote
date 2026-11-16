@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Schlichte Werkzeugleiste über den Seiten: Werkzeug, Farbe, Stärke, Rückgängig.
 struct ToolBarView: View {
+    @Environment(\.theme) private var theme
     @Bindable var tools: ToolState
 
     var body: some View {
@@ -56,10 +57,15 @@ struct ToolBarView: View {
                 tools.fingerDrawing.toggle()
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Theme.paper)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.hairline).frame(height: 1) }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        // Schwebende Leiste mit weichem Schatten statt einer flachen Linie.
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(theme.hairline))
+        .shadow(color: .black.opacity(theme.scheme == .dark ? 0.4 : 0.08), radius: 14, y: 6)
+        .padding(.horizontal, 20)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
         .animation(.snappy(duration: 0.2), value: tools.kind)
     }
 
@@ -73,6 +79,7 @@ struct ToolBarView: View {
 }
 
 private struct ToolButton: View {
+    @Environment(\.theme) private var theme
     let symbol: String
     let title: String
     let isSelected: Bool
@@ -83,9 +90,9 @@ private struct ToolButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 18, weight: .medium))
                 .frame(width: 40, height: 36)
-                .background(isSelected ? Theme.desk : .clear,
-                            in: RoundedRectangle(cornerRadius: 6))
-                .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                .background(isSelected ? theme.accent.opacity(0.16) : .clear,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .foregroundStyle(isSelected ? theme.accent : .primary)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
@@ -113,6 +120,7 @@ private struct ColorDot: View {
 }
 
 private struct WidthButton: View {
+    @Environment(\.theme) private var theme
     let level: Int
     let isSelected: Bool
     let action: () -> Void
@@ -122,9 +130,9 @@ private struct WidthButton: View {
             Capsule()
                 .frame(width: 18, height: CGFloat(2 + level * 3))
                 .frame(width: 36, height: 36)
-                .background(isSelected ? Theme.desk : .clear,
-                            in: RoundedRectangle(cornerRadius: 6))
-                .foregroundStyle(isSelected ? Color.accentColor : .primary)
+                .background(isSelected ? theme.accent.opacity(0.16) : .clear,
+                            in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .foregroundStyle(isSelected ? theme.accent : .primary)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Stärke \(level + 1)")

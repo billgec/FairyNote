@@ -3,12 +3,15 @@ import SwiftUI
 /// Kurzer Dialog für ein neues Notizbuch: Name, Papier, Coverfarbe.
 struct NewNotebookSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.theme) private var theme
     let defaultTitle: String
     let onCreate: (String, PaperStyle, String) -> Void
 
     @State private var title = ""
     @State private var paper: PaperStyle = .lined
-    @State private var color = Notebook.coverColors[0]
+    @State private var chosenColor: String?
+
+    private var color: String { chosenColor ?? theme.covers[0].hex }
 
     var body: some View {
         NavigationStack {
@@ -28,17 +31,23 @@ struct NewNotebookSheet: View {
                         .overlay(Rectangle().strokeBorder(.quaternary))
                 }
                 Section("Cover") {
-                    HStack(spacing: 14) {
-                        ForEach(Notebook.coverColors, id: \.self) { hex in
-                            Button { color = hex } label: {
-                                Circle()
-                                    .fill(Color(hex: hex))
-                                    .frame(width: 34, height: 34)
-                                    .padding(3)
-                                    .overlay(Circle().strokeBorder(color == hex ? Color.accentColor : .clear, lineWidth: 2))
+                    HStack(alignment: .center, spacing: 24) {
+                        CoverArt(title: title.isEmpty ? defaultTitle : title, hex: color, seed: Int(title.count))
+                            .frame(width: 96)
+                            .padding(.vertical, 8)
+                            .animation(.snappy, value: color)
+                        LazyVGrid(columns: Array(repeating: GridItem(.fixed(44), spacing: 10), count: 4), spacing: 10) {
+                            ForEach(theme.covers, id: \.hex) { cover in
+                                Button { chosenColor = cover.hex } label: {
+                                    Circle()
+                                        .fill(Color(hex: cover.hex))
+                                        .frame(width: 34, height: 34)
+                                        .padding(3)
+                                        .overlay(Circle().strokeBorder(color == cover.hex ? theme.accent : .clear, lineWidth: 2))
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(cover.name)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(Theme.coverName(hex))
                         }
                     }
                 }

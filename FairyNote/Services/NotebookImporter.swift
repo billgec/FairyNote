@@ -52,7 +52,8 @@ enum NotebookImporter {
         guard !document.isLocked else { throw ImportError.lockedPDF }
         guard document.pageCount > 0 else { throw ImportError.emptyPDF }
 
-        let cover = Theme.covers.randomElement()?.hex ?? Theme.covers[0].hex
+        let covers = AppTheme.current.covers
+        let cover = covers.randomElement()?.hex ?? covers[0].hex
         let notebook = Notebook(title: title, paperStyle: .blank, coverColorHex: cover)
         notebook.backgroundPDF = data
         context.insert(notebook)

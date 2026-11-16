@@ -9,6 +9,9 @@ enum SidebarItem: Hashable {
 /// Bibliothek: links Ordner, rechts Notizbücher als Grid.
 struct LibraryView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.theme) private var theme
+    @AppStorage(AppTheme.nameKey) private var userName = ""
+    @State private var showSettings = false
     @Query(sort: \Notebook.modifiedAt, order: .reverse) private var notebooks: [Notebook]
     @Query(sort: \Folder.name) private var folders: [Folder]
 
@@ -31,7 +34,7 @@ struct LibraryView: View {
     @State private var shareItem: ShareItem?
     @State private var transferError: String?
 
-    private let columns = [GridItem(.adaptive(minimum: 160), spacing: 24)]
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 28)]
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -70,6 +73,7 @@ struct LibraryView: View {
         // Dateien, die über „Teilen › FairyNote“ (z. B. aus GoodNotes oder Dateien) geöffnet werden.
         .onOpenURL { importFiles([$0]) }
         .sheet(item: $shareItem) { ShareSheet(url: $0.url) }
+        .sheet(isPresented: $showSettings) { SettingsView() }
         .alert("Import/Export", isPresented: Binding(get: { transferError != nil },
                                                      set: { if !$0 { transferError = nil } })) {
             Button("OK", role: .cancel) {}
@@ -91,22 +95,46 @@ struct LibraryView: View {
 
     private var sidebar: some View {
         List(selection: $selection) {
-            Label("Alle Notizbücher", systemImage: "books.vertical")
+            HStack(spacing: 10) {
+                Image(systemName: theme.motif)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(theme.accent.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .shadow(color: theme.accent.opacity(0.35), radius: 4, y: 2)
+                Text("FairyNote")
+                    .font(theme.title(24))
+                    .foregroundStyle(theme.ink)
+            }
+            .padding(.vertical, 6)
+            .listRowBackground(Color.clear)
+            .selectionDisabled()
+
+            Label("Alle Notizbücher", systemImage: "books.vertical.fill")
+                .badge(notebooks.count)
                 .tag(SidebarItem.all)
             Section("Ordner") {
                 OutlineGroup(rootFolders, children: \.subfolders) { folder in
                     Label { Text(folder.name) } icon: {
-                        Circle().fill(Theme.coral).frame(width: 8, height: 8)
+                        Image(systemName: "folder.fill").foregroundStyle(theme.accent.opacity(0.8))
                     }
-                        .tag(SidebarItem.folder(folder))
-                        .contextMenu { folderMenu(folder) }
+                    .badge(folder.notebooks?.count ?? 0)
+                    .tag(SidebarItem.folder(folder))
+                    .contextMenu { folderMenu(folder) }
                 }
             }
         }
-        .navigationTitle("FairyNote")
+        .scrollContentBackground(.hidden)
+        .background(theme.sidebar)
+        .navigationTitle("")
         .toolbar {
-            Button("Neuer Ordner", systemImage: "folder.badge.plus") {
-                startNameEdit(.newFolder(parent: nil))
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Einstellungen", systemImage: "gearshape") { showSettings = true }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Neuer Ordner", systemImage: "folder.badge.plus") {
+                    startNameEdit(.newFolder(parent: nil))
+                }
             }
         }
     }
@@ -145,30 +173,95 @@ struct LibraryView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 28) {
+            header
+            LazyVGrid(columns: columns, spacing: 32) {
                 ForEach(visibleNotebooks) { notebook in
                     NavigationLink(value: notebook) {
                         NotebookCover(notebook: notebook)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     .contextMenu { notebookMenu(notebook) }
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 32)
+            .padding(.bottom, 32)
         }
-        .background(Theme.paper)
+        .background(Backdrop())
         .overlay {
-            if visibleNotebooks.isEmpty {
-                ContentUnavailableView(currentFolder == nil ? "Noch keine Notizbücher" : "Ordner ist leer",
-                                       systemImage: "book.closed",
-                                       description: Text("Tippe auf + um ein Notizbuch anzulegen."))
-            }
+            if visibleNotebooks.isEmpty { emptyState }
         }
-        .navigationTitle(currentFolder?.name ?? "Alle Notizbücher")
+        .navigationTitle(currentFolder?.name ?? "Bibliothek")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // Großer Titel steht im Inhalt (in der Schrift des Themas), oben bleibt es ruhig.
+            ToolbarItem(placement: .principal) { Text("") }
+        }
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             Button("Importieren", systemImage: "square.and.arrow.down") { showImporter = true }
             Button("Neues Notizbuch", systemImage: "plus") { showNewNotebook = true }
         }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                Text(currentFolder?.name ?? Theme.greeting(name: userName))
+                    .font(theme.title(38))
+                    .foregroundStyle(theme.ink)
+                if currentFolder == nil {
+                    Image(systemName: theme.motif)
+                        .font(.system(size: 22))
+                        .foregroundStyle(theme.accent)
+                        .symbolEffect(.bounce, value: theme.id)
+                }
+            }
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(theme.secondaryInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 32)
+        .padding(.top, 8)
+        .padding(.bottom, 24)
+    }
+
+    private var subtitle: String {
+        let n = visibleNotebooks.count
+        let books = n == 1 ? "1 Notizbuch" : "\(n) Notizbücher"
+        return currentFolder == nil ? "\(books) in deiner Bibliothek" : books
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: theme.motif)
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 80, height: 80)
+                .background(theme.accent.gradient, in: Circle())
+                .shadow(color: theme.accent.opacity(0.4), radius: 12, y: 6)
+            Text(currentFolder == nil ? "Noch keine Notizbücher" : "Dieser Ordner ist noch leer")
+                .font(theme.title(22))
+                .foregroundStyle(theme.ink)
+            Text("Leg dein erstes Notizbuch an und fang einfach an zu schreiben.")
+                .font(.subheadline)
+                .foregroundStyle(theme.secondaryInk)
+                .multilineTextAlignment(.center)
+            Button {
+                showNewNotebook = true
+            } label: {
+                Label("Neues Notizbuch", systemImage: "plus")
+                    .font(.headline)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 12)
+                    .background(theme.accent, in: Capsule())
+                    .foregroundStyle(Theme.onColor(theme.accentHex))
+            }
+            .buttonStyle(PressableStyle())
+            .padding(.top, 6)
+        }
+        .padding(40)
+        .frame(maxWidth: 420)
     }
 
     @ViewBuilder
@@ -183,7 +276,7 @@ struct LibraryView: View {
             }
         }
         Menu("Coverfarbe", systemImage: "paintpalette") {
-            ForEach(Theme.covers, id: \.hex) { cover in
+            ForEach(theme.covers, id: \.hex) { cover in
                 Button(cover.name) {
                     notebook.coverColorHex = cover.hex
                     save()
@@ -341,39 +434,5 @@ private enum DeleteTarget {
         case .notebook:
             "Das Notizbuch und alle Seiten werden endgültig gelöscht."
         }
-    }
-}
-
-struct NotebookCover: View {
-    let notebook: Notebook
-
-    var body: some View {
-        let fg = Theme.onColor(notebook.coverColorHex)
-        VStack(alignment: .leading, spacing: 4) {
-            Rectangle()
-                .fill(Color(hex: notebook.coverColorHex))
-                .aspectRatio(0.75, contentMode: .fit)
-                .overlay(alignment: .topLeading) {
-                    Text(notebook.title.prefix(1).uppercased())
-                        .font(Theme.serif(96))
-                        .foregroundStyle(fg)
-                        .padding(.horizontal, 14)
-                        .offset(y: -6)
-                }
-                .overlay(alignment: .bottomLeading) {
-                    Text(notebook.title.uppercased())
-                        .font(.system(size: 10, weight: .medium))
-                        .tracking(1.2)
-                        .lineLimit(2)
-                        .foregroundStyle(fg.opacity(0.85))
-                        .padding(14)
-                }
-                .overlay(Rectangle().strokeBorder(.black.opacity(0.06)))
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .padding(.bottom, 6)
-            Text(notebook.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-            Text(notebook.modifiedAt, style: .date).font(.caption).foregroundStyle(.secondary)
-        }
-        .contentShape(Rectangle())
     }
 }

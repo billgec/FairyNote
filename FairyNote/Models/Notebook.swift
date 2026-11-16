@@ -3,8 +3,6 @@ import SwiftData
 
 @Model
 final class Notebook {
-    static let coverColors = Theme.covers.map(\.hex)
-
     var title: String = ""
     var createdAt: Date = Date()
     var modifiedAt: Date = Date()

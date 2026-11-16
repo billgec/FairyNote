@@ -3,28 +3,32 @@ import UIKit
 
 /// Zeichnet den Papierhintergrund relativ zur Seitenbreite, damit er bei jeder Größe gleich aussieht.
 struct PaperBackground: View {
+    @Environment(\.theme) private var theme
     let style: PaperStyle
 
     var body: some View {
+        let paper = UIColor(hex: theme.paperHex)
+        let line = UIColor(hex: theme.lineHex)
         Canvas { ctx, size in
-            ctx.withCGContext { PaperPattern.draw(style, in: $0, size: size) }
+            ctx.withCGContext { PaperPattern.draw(style, in: $0, size: size, paper: paper, line: line) }
         }
     }
 }
 
 /// Papiermuster als Core-Graphics-Zeichnung, gemeinsam für Anzeige und PDF-Export.
 enum PaperPattern {
-    static func draw(_ style: PaperStyle, in ctx: CGContext, size: CGSize) {
+    /// Standardfarben (weißes Papier, graue Linien) für den Export, im Editor kommen sie vom Thema.
+    static func draw(_ style: PaperStyle, in ctx: CGContext, size: CGSize,
+                     paper: UIColor = .white, line: UIColor = UIColor(white: 0.82, alpha: 1)) {
         ctx.saveGState()
         defer { ctx.restoreGState() }
 
-        ctx.setFillColor(UIColor.white.cgColor)
+        ctx.setFillColor(paper.cgColor)
         ctx.fill(CGRect(origin: .zero, size: size))
 
         let spacing = size.width / 28
         // Linienstärken sind für die Seitenbreite `Page.canvasWidth` gedacht und skalieren mit.
         let unit = size.width / Page.canvasWidth
-        let line = UIColor(white: 0.82, alpha: 1)
 
         switch style {
         case .blank:
