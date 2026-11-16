@@ -23,7 +23,8 @@ enum NotebookImporter {
         }
     }
 
-    static let importableTypes: [UTType] = [.pdf, .fairyNote]
+    /// .goodnotes ist mit drin, damit die Datei im Auswahldialog nicht ausgegraut ist und der Hinweis zum PDF-Export kommt.
+    static let importableTypes: [UTType] = [.pdf, .fairyNote] + [UTType(filenameExtension: "goodnotes")].compactMap { $0 }
 
     static func importFile(at url: URL, into context: ModelContext, folder: Folder?) throws -> Notebook {
         let scoped = url.startAccessingSecurityScopedResource()
@@ -78,6 +79,7 @@ enum NotebookImporter {
         let archive = try NotebookArchive.decode(data)
         let notebook = Notebook(title: archive.title,
                                 paperStyle: PaperStyle(rawValue: archive.paperStyle) ?? .lined,
+                                paperColor: archive.paperColor.flatMap(PaperColor.init(rawValue:)) ?? .theme,
                                 coverColorHex: archive.coverColorHex)
         notebook.createdAt = archive.createdAt
         notebook.backgroundPDF = archive.backgroundPDF
