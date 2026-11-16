@@ -11,7 +11,11 @@ struct CanvasView: UIViewRepresentable {
         let canvas = PKCanvasView()
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
+        #if targetEnvironment(simulator)
+        canvas.drawingPolicy = .anyInput // Simulator hat keinen Pencil
+        #else
         canvas.drawingPolicy = .pencilOnly
+        #endif
         canvas.isScrollEnabled = false
         if let data = drawingData, let drawing = try? PKDrawing(data: data) {
             canvas.drawing = drawing
