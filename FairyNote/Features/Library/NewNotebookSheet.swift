@@ -22,7 +22,7 @@ struct NewNotebookSheet: View {
                     }
                     .pickerStyle(.segmented)
                     PaperBackground(style: paper)
-                        .aspectRatio(PageView.aspectRatio, contentMode: .fit)
+                        .aspectRatio(595.28 / 841.89, contentMode: .fit) // DIN A4
                         .frame(height: 160)
                         .frame(maxWidth: .infinity)
                         .overlay(Rectangle().strokeBorder(.quaternary))
