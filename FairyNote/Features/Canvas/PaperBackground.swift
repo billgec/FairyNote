@@ -8,7 +8,7 @@ struct PaperBackground: View {
         Canvas { ctx, size in
             ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.white))
             let spacing = size.width / 28
-            let line = Color(red: 0.75, green: 0.8, blue: 0.9)
+            let line = Color(white: 0.82)
 
             switch style {
             case .blank:

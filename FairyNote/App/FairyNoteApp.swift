@@ -7,6 +7,7 @@ struct FairyNoteApp: App {
     private let container: ModelContainer
 
     init() {
+        Theme.setUp()
         do {
             container = try ModelContainer(for: Folder.self, Notebook.self, Page.self)
         } catch {

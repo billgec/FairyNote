@@ -74,7 +74,9 @@ struct LibraryView: View {
                 .tag(SidebarItem.all)
             Section("Ordner") {
                 OutlineGroup(rootFolders, children: \.subfolders) { folder in
-                    Label(folder.name, systemImage: "folder")
+                    Label { Text(folder.name) } icon: {
+                        Circle().fill(Theme.coral).frame(width: 8, height: 8)
+                    }
                         .tag(SidebarItem.folder(folder))
                         .contextMenu { folderMenu(folder) }
                 }
@@ -122,7 +124,7 @@ struct LibraryView: View {
 
     private var grid: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 24) {
+            LazyVGrid(columns: columns, spacing: 28) {
                 ForEach(visibleNotebooks) { notebook in
                     NavigationLink(value: notebook) {
                         NotebookCover(notebook: notebook)
@@ -133,6 +135,7 @@ struct LibraryView: View {
             }
             .padding(24)
         }
+        .background(Theme.paper)
         .overlay {
             if visibleNotebooks.isEmpty {
                 ContentUnavailableView(currentFolder == nil ? "Noch keine Notizbücher" : "Ordner ist leer",
@@ -158,9 +161,9 @@ struct LibraryView: View {
             }
         }
         Menu("Coverfarbe", systemImage: "paintpalette") {
-            ForEach(Array(Notebook.coverColors.enumerated()), id: \.offset) { i, hex in
-                Button("Farbe \(i + 1)") {
-                    notebook.coverColorHex = hex
+            ForEach(Theme.covers, id: \.hex) { cover in
+                Button(cover.name) {
+                    notebook.coverColorHex = cover.hex
                     save()
                 }
             }
@@ -291,18 +294,30 @@ struct NotebookCover: View {
     let notebook: Notebook
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(hex: notebook.coverColorHex).gradient)
+        let fg = Theme.onColor(notebook.coverColorHex)
+        VStack(alignment: .leading, spacing: 4) {
+            Rectangle()
+                .fill(Color(hex: notebook.coverColorHex))
                 .aspectRatio(0.75, contentMode: .fit)
-                .overlay(alignment: .bottomLeading) {
-                    Image(systemName: "sparkles")
-                        .font(.title2)
-                        .foregroundStyle(.white.opacity(0.8))
-                        .padding(12)
+                .overlay(alignment: .topLeading) {
+                    Text(notebook.title.prefix(1).uppercased())
+                        .font(Theme.serif(96))
+                        .foregroundStyle(fg)
+                        .padding(.horizontal, 14)
+                        .offset(y: -6)
                 }
-                .shadow(radius: 3, y: 2)
-            Text(notebook.title).font(.headline).lineLimit(1)
+                .overlay(alignment: .bottomLeading) {
+                    Text(notebook.title.uppercased())
+                        .font(.system(size: 10, weight: .medium))
+                        .tracking(1.2)
+                        .lineLimit(2)
+                        .foregroundStyle(fg.opacity(0.85))
+                        .padding(14)
+                }
+                .overlay(Rectangle().strokeBorder(.black.opacity(0.06)))
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+                .padding(.bottom, 6)
+            Text(notebook.title).font(.subheadline.weight(.semibold)).lineLimit(1)
             Text(notebook.modifiedAt, style: .date).font(.caption).foregroundStyle(.secondary)
         }
         .contentShape(Rectangle())
