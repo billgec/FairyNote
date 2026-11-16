@@ -141,6 +141,6 @@ struct PaperSettingsSheet: View {
         }
         .onChange(of: notebook.paperStyleRaw) { onChange() }
         .onChange(of: notebook.paperColorRaw) { onChange() }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
     }
 }
