@@ -296,8 +296,9 @@ struct LibraryView: View {
 
     // MARK: Aktionen
 
-    private func createNotebook(title: String, paper: PaperStyle, color: String) {
-        let notebook = Notebook(title: title, paperStyle: paper, coverColorHex: color, folder: currentFolder)
+    private func createNotebook(title: String, paper: PaperStyle, paperColor: PaperColor, color: String) {
+        let notebook = Notebook(title: title, paperStyle: paper, paperColor: paperColor,
+                                coverColorHex: color, folder: currentFolder)
         context.insert(notebook)
         notebook.addPage()
         save()
