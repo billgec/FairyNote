@@ -1,23 +1,27 @@
 import SwiftUI
 import SwiftData
 import PencilKit
+import PDFKit
 
 struct NotebookView: View {
     @Environment(\.modelContext) private var context
     @Bindable var notebook: Notebook
     @State private var tools = ToolState()
     @State private var pageToDelete: Page?
+    @State private var pdf: PDFDocument?
+    @State private var shareItem: ShareItem?
+    @State private var exportError: String?
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(notebook.sortedPages) { page in
                     VStack(spacing: 8) {
-                        PageView(page: page, paperStyle: notebook.paperStyle, tools: tools) {
+                        PageView(page: page, paperStyle: notebook.paperStyle,
+                                 pdfPage: page.pdfPageIndex.flatMap { pdf?.page(at: $0) }, tools: tools) {
                             notebook.touch()
                             AutoSaver.schedule(context)
                         }
-                        .aspectRatio(PageView.aspectRatio, contentMode: .fit)
                         .frame(maxWidth: 900)
                         .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
 
@@ -42,6 +46,20 @@ struct NotebookView: View {
                 notebook.addPage()
                 AutoSaver.saveNow(context)
             }
+            Menu("Exportieren", systemImage: "square.and.arrow.up") {
+                ForEach(ExportFormat.allCases) { format in
+                    Button(format.title, systemImage: format.systemImage) { export(as: format) }
+                }
+            }
+        }
+        .task(id: notebook.backgroundPDF?.count) {
+            pdf = notebook.backgroundPDF.flatMap { PDFDocument(data: $0) }
+        }
+        .sheet(item: $shareItem) { ShareSheet(url: $0.url) }
+        .alert("Export fehlgeschlagen", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
         }
         .confirmationDialog("Seite löschen?", isPresented: isDeleting, titleVisibility: .visible) {
             Button("Seite löschen", role: .destructive) {
@@ -89,29 +107,47 @@ struct NotebookView: View {
         .frame(maxWidth: 900)
     }
 
+    private func export(as format: ExportFormat) {
+        AutoSaver.saveNow(context)
+        do {
+            shareItem = ShareItem(url: try NotebookExporter.export(notebook, as: format))
+        } catch {
+            exportError = error.localizedDescription
+        }
+    }
+
     private var isDeleting: Binding<Bool> {
         Binding(get: { pageToDelete != nil }, set: { if !$0 { pageToDelete = nil } })
     }
 }
 
 struct PageView: View {
-    static let aspectRatio: CGFloat = 1 / 1.414 // DIN A4
-
     @Bindable var page: Page
     let paperStyle: PaperStyle
+    let pdfPage: PDFPage?
     let tools: ToolState
     let onChange: () -> Void
 
     var body: some View {
-        ZStack {
-            PaperBackground(style: paperStyle)
-            CanvasView(drawingData: $page.drawingData,
-                       tool: tools.pkTool,
-                       toolSignature: tools.signature,
-                       fingerDrawing: tools.fingerDrawing,
-                       onBegin: { tools.activeCanvas = $0 },
-                       onChange: onChange)
+        GeometryReader { geo in
+            // Inhalt in fester Seitengröße aufbauen und auf die verfügbare Breite skalieren.
+            ZStack {
+                if let pdfPage {
+                    PDFPageBackground(page: pdfPage)
+                } else {
+                    PaperBackground(style: paperStyle)
+                }
+                CanvasView(drawingData: $page.drawingData,
+                           tool: tools.pkTool,
+                           toolSignature: tools.signature,
+                           fingerDrawing: tools.fingerDrawing,
+                           onBegin: { tools.activeCanvas = $0 },
+                           onChange: onChange)
+            }
+            .frame(width: page.canvasSize.width, height: page.canvasSize.height)
+            .scaleEffect(geo.size.width / Page.canvasWidth, anchor: .topLeading)
         }
+        .aspectRatio(page.aspectRatio, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }

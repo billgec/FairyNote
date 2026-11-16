@@ -11,6 +11,8 @@ final class Notebook {
     var coverColorHex: String = "#FF5A3C"
     var paperStyleRaw: String = PaperStyle.lined.rawValue
     var folder: Folder?
+    /// Importiertes PDF, dessen Seiten als Hintergrund dienen (siehe `Page.pdfPageIndex`).
+    @Attribute(.externalStorage) var backgroundPDF: Data?
     @Relationship(deleteRule: .cascade, inverse: \Page.notebook) var pages: [Page]? = []
 
     var paperStyle: PaperStyle {
@@ -38,6 +40,11 @@ final class Notebook {
         let index = min(max(position ?? pages.count, 0), pages.count)
         for page in pages where page.index >= index { page.index += 1 }
         let page = Page(index: index)
+        // Neue Seiten übernehmen das Format der Nachbarseite (wichtig bei Querformat-PDFs).
+        if let neighbor = index > 0 ? pages[index - 1] : pages.first {
+            page.width = neighbor.width
+            page.height = neighbor.height
+        }
         page.notebook = self
         self.pages = pages + [page]
         touch()
@@ -49,6 +56,7 @@ final class Notebook {
     func duplicatePage(_ page: Page) -> Page {
         let copy = addPage(at: page.index + 1)
         copy.drawingData = page.drawingData
+        copy.pdfPageIndex = page.pdfPageIndex
         return copy
     }
 
