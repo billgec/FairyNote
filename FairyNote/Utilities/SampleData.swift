@@ -17,10 +17,10 @@ enum SampleData {
             let notebook = Notebook(title: title, paperStyle: [.lined, .grid, .dotted][i % 3],
                                     coverColorHex: covers[i % covers.count].hex,
                                     folder: i < 4 ? uni : (i == 4 ? exams : nil))
+            context.insert(notebook)
+            notebook.addPage() // setzt modifiedAt, deshalb Datumswerte danach
             notebook.createdAt = Date(timeIntervalSince1970: Double(1_700_000_000 + i * 7))
             notebook.modifiedAt = Date().addingTimeInterval(Double(-i) * 86_400)
-            context.insert(notebook)
-            notebook.addPage()
         }
         try? context.save()
     }
