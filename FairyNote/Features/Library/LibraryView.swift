@@ -1,51 +1,289 @@
 import SwiftUI
 import SwiftData
 
+enum SidebarItem: Hashable {
+    case all
+    case folder(Folder)
+}
+
+/// Bibliothek: links Ordner, rechts Notizbücher als Grid.
 struct LibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Notebook.modifiedAt, order: .reverse) private var notebooks: [Notebook]
+    @Query(sort: \Folder.name) private var folders: [Folder]
+
+    @State private var selection: SidebarItem? = .all
     @State private var path = NavigationPath()
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
+    @State private var showNewNotebook = false
+
+    // Umbenennen / Neuer Ordner
+    @State private var nameEdit: NameEdit?
+    @State private var nameText = ""
+    @State private var isEditingName = false
+
+    // Löschen
+    @State private var deleteTarget: DeleteTarget?
+    @State private var isDeleting = false
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 24)]
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 24) {
-                    ForEach(notebooks) { notebook in
-                        NavigationLink(value: notebook) {
-                            NotebookCover(notebook: notebook)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Löschen", systemImage: "trash", role: .destructive) {
-                                context.delete(notebook)
-                            }
-                        }
-                    }
-                }
-                .padding(24)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebar
+        } detail: {
+            NavigationStack(path: $path) {
+                grid
+                    .navigationDestination(for: Notebook.self) { NotebookView(notebook: $0) }
             }
-            .overlay {
-                if notebooks.isEmpty {
-                    ContentUnavailableView("Noch keine Notizbücher",
-                                           systemImage: "book.closed",
-                                           description: Text("Tippe auf + um loszulegen."))
-                }
-            }
-            .navigationTitle("FairyNote")
-            .toolbar {
-                Button("Neues Notizbuch", systemImage: "plus", action: createNotebook)
-            }
-            .navigationDestination(for: Notebook.self) { NotebookView(notebook: $0) }
+        }
+        .onChange(of: path.count) { _, count in
+            withAnimation { columnVisibility = count > 0 ? .detailOnly : .automatic }
+        }
+        .onChange(of: selection) { path = NavigationPath() }
+        .sheet(isPresented: $showNewNotebook) {
+            NewNotebookSheet(defaultTitle: "Notizbuch \(notebooks.count + 1)", onCreate: createNotebook)
+        }
+        .alert(nameEdit?.title ?? "", isPresented: $isEditingName) {
+            TextField("Name", text: $nameText)
+            Button("Abbrechen", role: .cancel) {}
+            Button("Sichern", action: applyNameEdit)
+        }
+        .confirmationDialog(deleteTarget?.title ?? "", isPresented: $isDeleting, titleVisibility: .visible,
+                            presenting: deleteTarget) { target in
+            Button("Löschen", role: .destructive) { delete(target) }
+        } message: { target in
+            Text(target.message)
         }
     }
 
-    private func createNotebook() {
-        let notebook = Notebook(title: "Notizbuch \(notebooks.count + 1)")
+    // MARK: Sidebar
+
+    private var rootFolders: [Folder] {
+        folders.filter { $0.parent == nil }
+    }
+
+    /// Alle Ordner als flache Liste mit vollem Pfad, für "Verschieben".
+    private var allFolders: [Folder] {
+        rootFolders.flatMap(\.subtree)
+    }
+
+    private var sidebar: some View {
+        List(selection: $selection) {
+            Label("Alle Notizbücher", systemImage: "books.vertical")
+                .tag(SidebarItem.all)
+            Section("Ordner") {
+                OutlineGroup(rootFolders, children: \.subfolders) { folder in
+                    Label(folder.name, systemImage: "folder")
+                        .tag(SidebarItem.folder(folder))
+                        .contextMenu { folderMenu(folder) }
+                }
+            }
+        }
+        .navigationTitle("FairyNote")
+        .toolbar {
+            Button("Neuer Ordner", systemImage: "folder.badge.plus") {
+                startNameEdit(.newFolder(parent: nil))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func folderMenu(_ folder: Folder) -> some View {
+        Button("Neuer Unterordner", systemImage: "folder.badge.plus") {
+            startNameEdit(.newFolder(parent: folder))
+        }
+        Button("Umbenennen", systemImage: "pencil") {
+            startNameEdit(.renameFolder(folder))
+        }
+        Menu("Verschieben", systemImage: "folder") {
+            Button("Oberste Ebene") { move(folder, to: nil) }
+            ForEach(allFolders.filter { !folder.contains($0) }) { target in
+                Button(target.pathName) { move(folder, to: target) }
+            }
+        }
+        Divider()
+        Button("Löschen", systemImage: "trash", role: .destructive) {
+            confirmDelete(.folder(folder))
+        }
+    }
+
+    // MARK: Grid
+
+    private var currentFolder: Folder? {
+        if case .folder(let folder) = selection { return folder }
+        return nil
+    }
+
+    private var visibleNotebooks: [Notebook] {
+        guard let folder = currentFolder else { return notebooks }
+        return notebooks.filter { $0.folder == folder }
+    }
+
+    private var grid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 24) {
+                ForEach(visibleNotebooks) { notebook in
+                    NavigationLink(value: notebook) {
+                        NotebookCover(notebook: notebook)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu { notebookMenu(notebook) }
+                }
+            }
+            .padding(24)
+        }
+        .overlay {
+            if visibleNotebooks.isEmpty {
+                ContentUnavailableView(currentFolder == nil ? "Noch keine Notizbücher" : "Ordner ist leer",
+                                       systemImage: "book.closed",
+                                       description: Text("Tippe auf + um ein Notizbuch anzulegen."))
+            }
+        }
+        .navigationTitle(currentFolder?.name ?? "Alle Notizbücher")
+        .toolbar {
+            Button("Neues Notizbuch", systemImage: "plus") { showNewNotebook = true }
+        }
+    }
+
+    @ViewBuilder
+    private func notebookMenu(_ notebook: Notebook) -> some View {
+        Button("Umbenennen", systemImage: "pencil") {
+            startNameEdit(.renameNotebook(notebook))
+        }
+        Menu("Verschieben", systemImage: "folder") {
+            Button("Kein Ordner") { move(notebook, to: nil) }
+            ForEach(allFolders) { folder in
+                Button(folder.pathName) { move(notebook, to: folder) }
+            }
+        }
+        Menu("Coverfarbe", systemImage: "paintpalette") {
+            ForEach(Array(Notebook.coverColors.enumerated()), id: \.offset) { i, hex in
+                Button("Farbe \(i + 1)") {
+                    notebook.coverColorHex = hex
+                    save()
+                }
+            }
+        }
+        Divider()
+        Button("Löschen", systemImage: "trash", role: .destructive) {
+            confirmDelete(.notebook(notebook))
+        }
+    }
+
+    // MARK: Aktionen
+
+    private func createNotebook(title: String, paper: PaperStyle, color: String) {
+        let notebook = Notebook(title: title, paperStyle: paper, coverColorHex: color, folder: currentFolder)
         context.insert(notebook)
         notebook.addPage()
+        save()
         path.append(notebook)
+    }
+
+    private func move(_ notebook: Notebook, to folder: Folder?) {
+        notebook.folder = folder
+        save()
+    }
+
+    private func move(_ folder: Folder, to parent: Folder?) {
+        guard parent.map({ !folder.contains($0) }) ?? true else { return }
+        folder.parent = parent
+        save()
+    }
+
+    private func startNameEdit(_ edit: NameEdit) {
+        nameEdit = edit
+        nameText = edit.initialText
+        isEditingName = true
+    }
+
+    private func applyNameEdit() {
+        let name = nameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let edit = nameEdit else { return }
+        switch edit {
+        case .newFolder(let parent):
+            let folder = Folder(name: name, parent: parent)
+            context.insert(folder)
+            selection = .folder(folder)
+        case .renameFolder(let folder):
+            folder.name = name
+        case .renameNotebook(let notebook):
+            notebook.title = name
+            notebook.touch()
+        }
+        save()
+    }
+
+    private func confirmDelete(_ target: DeleteTarget) {
+        deleteTarget = target
+        isDeleting = true
+    }
+
+    private func delete(_ target: DeleteTarget) {
+        switch target {
+        case .notebook(let notebook):
+            context.delete(notebook)
+        case .folder(let folder):
+            // Notizbücher bleiben erhalten und wandern eine Ebene nach oben.
+            for sub in folder.subtree {
+                let contained = sub.notebooks ?? []
+                for notebook in contained { notebook.folder = folder.parent }
+                sub.notebooks = []
+            }
+            if case .folder(let selected) = selection, folder.contains(selected) {
+                selection = .all
+            }
+            context.delete(folder)
+        }
+        save()
+    }
+
+    private func save() { AutoSaver.saveNow(context) }
+}
+
+// MARK: - Hilfstypen
+
+private enum NameEdit {
+    case newFolder(parent: Folder?)
+    case renameFolder(Folder)
+    case renameNotebook(Notebook)
+
+    var title: String {
+        switch self {
+        case .newFolder(let parent): parent == nil ? "Neuer Ordner" : "Neuer Unterordner"
+        case .renameFolder: "Ordner umbenennen"
+        case .renameNotebook: "Notizbuch umbenennen"
+        }
+    }
+
+    var initialText: String {
+        switch self {
+        case .newFolder: ""
+        case .renameFolder(let folder): folder.name
+        case .renameNotebook(let notebook): notebook.title
+        }
+    }
+}
+
+private enum DeleteTarget {
+    case folder(Folder)
+    case notebook(Notebook)
+
+    var title: String {
+        switch self {
+        case .folder(let folder): "Ordner „\(folder.name)“ löschen?"
+        case .notebook(let notebook): "„\(notebook.title)“ löschen?"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .folder(let folder):
+            "Die Notizbücher darin werden nach \(folder.parent.map { "„\($0.name)“" } ?? "„Alle Notizbücher“") verschoben."
+        case .notebook:
+            "Das Notizbuch und alle Seiten werden endgültig gelöscht."
+        }
     }
 }
 
@@ -67,14 +305,6 @@ struct NotebookCover: View {
             Text(notebook.title).font(.headline).lineLimit(1)
             Text(notebook.modifiedAt, style: .date).font(.caption).foregroundStyle(.secondary)
         }
-    }
-}
-
-extension Color {
-    init(hex: String) {
-        let value = UInt64(hex.trimmingCharacters(in: CharacterSet(charactersIn: "#")), radix: 16) ?? 0
-        self.init(red: Double((value >> 16) & 0xFF) / 255,
-                  green: Double((value >> 8) & 0xFF) / 255,
-                  blue: Double(value & 0xFF) / 255)
+        .contentShape(Rectangle())
     }
 }
