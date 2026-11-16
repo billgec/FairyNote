@@ -1,46 +1,65 @@
 import SwiftUI
 import PencilKit
 
-/// Zeichenfläche auf Basis von PencilKit. Speichert bei jeder Änderung in `drawingData`.
+/// PKCanvasView mit eigenem UndoManager, damit Rückgängig pro Seite funktioniert.
+final class PageCanvasView: PKCanvasView {
+    private let pageUndoManager = UndoManager()
+    override var undoManager: UndoManager? { pageUndoManager }
+}
+
+/// Zeichenfläche auf Basis von PencilKit. Meldet jede Änderung über `onChange`.
 struct CanvasView: UIViewRepresentable {
     @Binding var drawingData: Data?
+    let tool: PKTool
+    let toolSignature: String
+    let fingerDrawing: Bool
+    var onBegin: (PKCanvasView) -> Void = { _ in }
+    var onChange: () -> Void = {}
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeUIView(context: Context) -> PKCanvasView {
-        let canvas = PKCanvasView()
+    func makeUIView(context: Context) -> PageCanvasView {
+        let canvas = PageCanvasView()
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        #if targetEnvironment(simulator)
-        canvas.drawingPolicy = .anyInput // Simulator hat keinen Pencil
-        #else
-        canvas.drawingPolicy = .pencilOnly
-        #endif
+        // Papier ist immer weiß, also keine Farbumkehr im Dunkelmodus.
+        canvas.overrideUserInterfaceStyle = .light
         canvas.isScrollEnabled = false
+        canvas.drawingPolicy = fingerDrawing ? .anyInput : .pencilOnly
+        canvas.tool = tool
+        context.coordinator.appliedSignature = toolSignature
         if let data = drawingData, let drawing = try? PKDrawing(data: data) {
             canvas.drawing = drawing
         }
         canvas.delegate = context.coordinator
-
-        let toolPicker = context.coordinator.toolPicker
-        toolPicker.addObserver(canvas)
-        toolPicker.setVisible(true, forFirstResponder: canvas)
-        DispatchQueue.main.async { canvas.becomeFirstResponder() }
         return canvas
     }
 
-    func updateUIView(_ canvas: PKCanvasView, context: Context) {}
+    func updateUIView(_ canvas: PageCanvasView, context: Context) {
+        context.coordinator.parent = self
+        let policy: PKCanvasViewDrawingPolicy = fingerDrawing ? .anyInput : .pencilOnly
+        if canvas.drawingPolicy != policy { canvas.drawingPolicy = policy }
+        if context.coordinator.appliedSignature != toolSignature {
+            canvas.tool = tool
+            context.coordinator.appliedSignature = toolSignature
+        }
+    }
 
     final class Coordinator: NSObject, PKCanvasViewDelegate {
         var parent: CanvasView
-        // Ein gemeinsamer Tool-Picker für alle Seiten, damit Stiftauswahl seitenübergreifend gilt.
-        static let toolPicker = PKToolPicker()
-        var toolPicker: PKToolPicker { Self.toolPicker }
+        var appliedSignature = ""
 
         init(_ parent: CanvasView) { self.parent = parent }
 
+        func canvasViewDidBeginUsingTool(_ canvasView: PKCanvasView) {
+            parent.onBegin(canvasView)
+        }
+
         func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            parent.drawingData = canvasView.drawing.dataRepresentation()
+            let data = canvasView.drawing.dataRepresentation()
+            guard data != parent.drawingData else { return }
+            parent.drawingData = data
+            parent.onChange()
         }
     }
 }
