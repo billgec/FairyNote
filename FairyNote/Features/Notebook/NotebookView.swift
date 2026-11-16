@@ -5,6 +5,7 @@ import PDFKit
 
 struct NotebookView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.theme) private var theme
     @Bindable var notebook: Notebook
     @State private var tools = ToolState()
     @State private var pageToDelete: Page?
@@ -14,7 +15,7 @@ struct NotebookView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: 20) {
                 ForEach(notebook.sortedPages) { page in
                     VStack(spacing: 8) {
                         PageView(page: page, paperStyle: notebook.paperStyle,
@@ -23,7 +24,8 @@ struct NotebookView: View {
                             AutoSaver.schedule(context)
                         }
                         .frame(maxWidth: 900)
-                        .shadow(color: .black.opacity(0.08), radius: 10, y: 3)
+                        .shadow(color: .black.opacity(theme.scheme == .dark ? 0.4 : 0.06), radius: 2, y: 1)
+                        .shadow(color: .black.opacity(theme.scheme == .dark ? 0.5 : 0.10), radius: 18, y: 10)
 
                         pageFooter(page)
                     }
@@ -32,8 +34,9 @@ struct NotebookView: View {
             .padding(32)
         }
         .scrollDismissesKeyboard(.immediately)
-        .background(Theme.desk)
+        .background(theme.desk)
         .safeAreaInset(edge: .top, spacing: 0) { ToolBarView(tools: tools) }
+        .toolbarBackground(theme.desk, for: .navigationBar)
         .navigationTitle($notebook.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -78,7 +81,7 @@ struct NotebookView: View {
         HStack {
             Text("Seite \(page.index + 1) von \(notebook.sortedPages.count)")
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.secondaryInk)
             Spacer()
             Menu {
                 Button("Neue Seite davor", systemImage: "arrow.up.doc") {
@@ -101,6 +104,7 @@ struct NotebookView: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .font(.title3)
+                    .foregroundStyle(theme.secondaryInk)
                     .padding(4)
             }
         }
