@@ -14,7 +14,8 @@ enum SampleData {
         let covers = AppTheme.current.covers
         let titles = ["Zellbiologie", "Statistik II", "Seminar Ethik", "Anatomie", "Lernplan", "Chemie", "Tagebuch", "Skizzen"]
         for (i, title) in titles.enumerated() {
-            let notebook = Notebook(title: title, paperStyle: [.lined, .grid, .dotted][i % 3],
+            let template = NotebookTemplate.all[i % NotebookTemplate.all.count]
+            let notebook = Notebook(title: title, paperStyle: template.style, paperColor: template.color,
                                     coverColorHex: covers[i % covers.count].hex,
                                     folder: i < 4 ? uni : (i == 4 ? exams : nil))
             context.insert(notebook)

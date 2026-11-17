@@ -25,6 +25,8 @@ struct NotebookArchive: Codable {
     var modifiedAt: Date
     var coverColorHex: String
     var paperStyle: String
+    /// Ab FairyNote mit Papierfarben, fehlt in älteren Dateien.
+    var paperColor: String?
     var backgroundPDF: Data?
     var pages: [PageEntry]
 
@@ -34,6 +36,7 @@ struct NotebookArchive: Codable {
         modifiedAt = notebook.modifiedAt
         coverColorHex = notebook.coverColorHex
         paperStyle = notebook.paperStyleRaw
+        paperColor = notebook.paperColorRaw
         backgroundPDF = notebook.backgroundPDF
         pages = notebook.sortedPages.map {
             PageEntry(drawing: $0.drawingData, pdfPageIndex: $0.pdfPageIndex,

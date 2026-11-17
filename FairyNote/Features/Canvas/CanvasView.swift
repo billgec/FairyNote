@@ -13,6 +13,8 @@ struct CanvasView: UIViewRepresentable {
     let tool: PKTool
     let toolSignature: String
     let fingerDrawing: Bool
+    /// Auf dunklem Papier zeigt PencilKit die Striche im Dunkelmodus (dunkle Tinte wird hell).
+    var darkPaper = false
     var onBegin: (PKCanvasView) -> Void = { _ in }
     var onChange: () -> Void = {}
 
@@ -22,8 +24,7 @@ struct CanvasView: UIViewRepresentable {
         let canvas = PageCanvasView()
         canvas.backgroundColor = .clear
         canvas.isOpaque = false
-        // Papier ist immer weiß, also keine Farbumkehr im Dunkelmodus.
-        canvas.overrideUserInterfaceStyle = .light
+        canvas.overrideUserInterfaceStyle = darkPaper ? .dark : .light
         canvas.isScrollEnabled = false
         canvas.drawingPolicy = fingerDrawing ? .anyInput : .pencilOnly
         canvas.tool = tool
@@ -39,6 +40,8 @@ struct CanvasView: UIViewRepresentable {
         context.coordinator.parent = self
         let policy: PKCanvasViewDrawingPolicy = fingerDrawing ? .anyInput : .pencilOnly
         if canvas.drawingPolicy != policy { canvas.drawingPolicy = policy }
+        let style: UIUserInterfaceStyle = darkPaper ? .dark : .light
+        if canvas.overrideUserInterfaceStyle != style { canvas.overrideUserInterfaceStyle = style }
         if context.coordinator.appliedSignature != toolSignature {
             canvas.tool = tool
             context.coordinator.appliedSignature = toolSignature

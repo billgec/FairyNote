@@ -12,13 +12,14 @@ struct NotebookView: View {
     @State private var pdf: PDFDocument?
     @State private var shareItem: ShareItem?
     @State private var exportError: String?
+    @State private var showPaper = false
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 20) {
                 ForEach(notebook.sortedPages) { page in
                     VStack(spacing: 8) {
-                        PageView(page: page, paperStyle: notebook.paperStyle,
+                        PageView(page: page, paperStyle: notebook.paperStyle, paperColor: notebook.paperColor,
                                  pdfPage: page.pdfPageIndex.flatMap { pdf?.page(at: $0) }, tools: tools) {
                             notebook.touch()
                             AutoSaver.schedule(context)
@@ -40,11 +41,7 @@ struct NotebookView: View {
         .navigationTitle($notebook.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Menu("Papier", systemImage: "doc.richtext") {
-                Picker("Papier", selection: $notebook.paperStyle) {
-                    ForEach(PaperStyle.allCases) { Text($0.title).tag($0) }
-                }
-            }
+            Button("Papier", systemImage: "doc.richtext") { showPaper = true }
             Button("Seite hinzufügen", systemImage: "doc.badge.plus") {
                 notebook.addPage()
                 AutoSaver.saveNow(context)
@@ -59,6 +56,9 @@ struct NotebookView: View {
             pdf = notebook.backgroundPDF.flatMap { PDFDocument(data: $0) }
         }
         .sheet(item: $shareItem) { ShareSheet(url: $0.url) }
+        .sheet(isPresented: $showPaper) {
+            PaperSettingsSheet(notebook: notebook) { AutoSaver.schedule(context) }
+        }
         .alert("Export fehlgeschlagen", isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -126,8 +126,10 @@ struct NotebookView: View {
 }
 
 struct PageView: View {
+    @Environment(\.theme) private var theme
     @Bindable var page: Page
     let paperStyle: PaperStyle
+    let paperColor: PaperColor
     let pdfPage: PDFPage?
     let tools: ToolState
     let onChange: () -> Void
@@ -139,12 +141,13 @@ struct PageView: View {
                 if let pdfPage {
                     PDFPageBackground(page: pdfPage)
                 } else {
-                    PaperBackground(style: paperStyle)
+                    PaperBackground(style: paperStyle, color: paperColor)
                 }
                 CanvasView(drawingData: $page.drawingData,
                            tool: tools.pkTool,
                            toolSignature: tools.signature,
                            fingerDrawing: tools.fingerDrawing,
+                           darkPaper: pdfPage == nil && paperColor.isDark(for: theme),
                            onBegin: { tools.activeCanvas = $0 },
                            onChange: onChange)
             }

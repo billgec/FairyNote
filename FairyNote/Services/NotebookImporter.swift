@@ -78,6 +78,7 @@ enum NotebookImporter {
         let archive = try NotebookArchive.decode(data)
         let notebook = Notebook(title: archive.title,
                                 paperStyle: PaperStyle(rawValue: archive.paperStyle) ?? .lined,
+                                paperColor: archive.paperColor.flatMap(PaperColor.init(rawValue:)) ?? .theme,
                                 coverColorHex: archive.coverColorHex)
         notebook.createdAt = archive.createdAt
         notebook.backgroundPDF = archive.backgroundPDF

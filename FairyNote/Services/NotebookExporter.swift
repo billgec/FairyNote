@@ -54,8 +54,9 @@ enum NotebookExporter {
         format.documentInfo = info
         let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: CGSize(width: 595.28, height: 841.89)),
                                              format: format)
-        // Striche immer in hellen Farben rendern, auch wenn das iPad im Dunkelmodus ist.
-        let light = UITraitCollection(userInterfaceStyle: .light)
+        // Striche wie im Editor rendern: hell auf dunklem Papier, sonst immer in den hellen Originalfarben.
+        let theme = AppTheme.current
+        let darkPaper = notebook.paperColor.isDark(for: theme)
 
         return renderer.pdfData { ctx in
             for page in notebook.sortedPages {
@@ -68,13 +69,16 @@ enum NotebookExporter {
                     cg.fill(rect)
                     PDFPageDrawing.draw(pdfPage, in: cg, size: rect.size)
                 } else {
-                    PaperPattern.draw(notebook.paperStyle, in: cg, size: rect.size)
+                    PaperPattern.draw(notebook.paperStyle, color: notebook.paperColor, theme: theme,
+                                      in: cg, size: rect.size)
                 }
 
                 guard let data = page.drawingData, let drawing = try? PKDrawing(data: data),
                       !drawing.strokes.isEmpty else { continue }
                 var image = UIImage()
-                light.performAsCurrent {
+                let onPDF = page.pdfPageIndex != nil && background != nil
+                let traits = UITraitCollection(userInterfaceStyle: darkPaper && !onPDF ? .dark : .light)
+                traits.performAsCurrent {
                     image = drawing.image(from: CGRect(origin: .zero, size: page.canvasSize), scale: 2)
                 }
                 image.draw(in: rect)
