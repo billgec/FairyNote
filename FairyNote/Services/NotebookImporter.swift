@@ -14,16 +14,16 @@ enum NotebookImporter {
             case .unreadablePDF: "Die PDF-Datei konnte nicht gelesen werden."
             case .lockedPDF: "Das PDF ist passwortgeschützt. Bitte ohne Passwort exportieren."
             case .emptyPDF: "Das PDF enthält keine Seiten."
-            case .unsupported(let ext):
-                ext == "goodnotes"
-                    ? "GoodNotes-Dateien (.goodnotes) sind ein geschlossenes Format. Bitte in GoodNotes über Teilen › Exportieren › PDF exportieren und das PDF importieren."
-                    : "Dieser Dateityp wird nicht unterstützt (.\(ext))."
+            case .unsupported(let ext): "Dieser Dateityp wird nicht unterstützt (.\(ext))."
             case .newerVersion: "Die Datei stammt aus einer neueren FairyNote-Version. Bitte die App aktualisieren."
             }
         }
     }
 
-    static let importableTypes: [UTType] = [.pdf, .fairyNote]
+    static let importableTypes: [UTType] = [.pdf, .fairyNote, .goodNotes]
+
+    /// Hinweise aus dem letzten Import (z. B. nicht übernommene GoodNotes-Elemente), für die Anzeige.
+    static var lastNotice: String?
 
     static func importFile(at url: URL, into context: ModelContext, folder: Folder?) throws -> Notebook {
         let scoped = url.startAccessingSecurityScopedResource()
@@ -34,7 +34,14 @@ enum NotebookImporter {
         let title = url.deletingPathExtension().lastPathComponent
 
         let notebook: Notebook
-        if ext == "fairynote" {
+        lastNotice = nil
+        if ext == "goodnotes" || (ext != "pdf" && ext != "fairynote" && data.starts(with: Data("PK".utf8))) {
+            let result = try GoodNotesImporter.importNotebook(data, title: title, into: context)
+            notebook = result.notebook
+            if result.skippedElements > 0 {
+                lastNotice = "„\(title)“: \(result.skippedElements) Elemente (Formen, Textfelder oder Bilder) konnten noch nicht übernommen werden."
+            }
+        } else if ext == "fairynote" {
             notebook = try importArchive(data, into: context)
         } else if ext == "pdf" || data.starts(with: Data("%PDF".utf8)) {
             notebook = try importPDF(data, title: title, into: context)
