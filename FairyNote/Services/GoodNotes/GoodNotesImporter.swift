@@ -51,7 +51,9 @@ enum GoodNotesImporter {
         case .highlighter: ink = PKInk(.marker, color: UIColor(red: c.r, green: c.g, blue: c.b, alpha: 1))
         case .pencil: ink = PKInk(.pencil, color: UIColor(red: c.r, green: c.g, blue: c.b, alpha: c.a))
         }
-        let width = max(s.width * scale, 0.5)
+        // PencilKit zeichnet Stifte deutlich dünner als die nominelle Breite, GoodNotes eher kräftig.
+        // Ohne Ausgleich ist die Schrift auf großen Seiten (z. B. A4-PDFs) praktisch unsichtbar.
+        let width = s.tool == .highlighter ? s.width * scale : max(s.width * scale * 2, 1.8)
         var points = s.points
         // Ein einzelner Punkt (z. B. i-Punkt) braucht zwei Kontrollpunkte, damit PencilKit ihn zeichnet.
         if points.count == 1 { points.append(points[0]) }
