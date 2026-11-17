@@ -53,7 +53,7 @@ enum GoodNotesImporter {
         }
         // PencilKit zeichnet Stifte deutlich dünner als die nominelle Breite, GoodNotes eher kräftig.
         // Ohne Ausgleich ist die Schrift auf großen Seiten (z. B. A4-PDFs) praktisch unsichtbar.
-        let width = s.tool == .highlighter ? s.width * scale : max(s.width * scale * 2, 1.8)
+        let width = s.tool == .highlighter ? s.width * scale : max(s.width * scale * 1.5, 1.8)
         var points = s.points
         // Ein einzelner Punkt (z. B. i-Punkt) braucht zwei Kontrollpunkte, damit PencilKit ihn zeichnet.
         if points.count == 1 { points.append(points[0]) }
