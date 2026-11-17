@@ -4,6 +4,8 @@ import UniformTypeIdentifiers
 extension UTType {
     /// Eigenes, verlustfreies Austauschformat (.fairynote).
     static let fairyNote = UTType(exportedAs: "com.billgec.fairynote.notebook")
+    /// GoodNotes-Notizbuch. Ist GoodNotes installiert, gilt dessen Typ, sonst unsere Deklaration.
+    static let goodNotes = UTType(filenameExtension: "goodnotes") ?? UTType(importedAs: "com.goodnotesapp.goodnotes")
 }
 
 /// Inhalt einer .fairynote-Datei: das ganze Notizbuch inkl. bearbeitbarer Striche und PDF-Hintergrund.

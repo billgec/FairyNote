@@ -310,13 +310,14 @@ struct LibraryView: View {
         for url in urls {
             do {
                 imported.append(try NotebookImporter.importFile(at: url, into: context, folder: currentFolder))
+                if let notice = NotebookImporter.lastNotice { errors.append(notice) }
             } catch {
                 errors.append("\(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
         if !errors.isEmpty { transferError = errors.joined(separator: "\n\n") }
         // Ein einzelnes Notizbuch direkt öffnen.
-        if imported.count == 1, errors.isEmpty {
+        if imported.count == 1, urls.count == 1 {
             path = NavigationPath()
             path.append(imported[0])
         }
