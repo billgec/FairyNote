@@ -4,7 +4,7 @@ import PencilKit
 import SwiftData
 
 /// Wandelt ein GoodNotes-Dokument in ein FairyNote-Notizbuch um:
-/// Vorlage/PDF-Seite und nicht umwandelbare Umrisse landen vektoriell im Hintergrund-PDF,
+/// Vorlage/PDF-Seite, Formen und nicht umwandelbare Umrisse landen vektoriell im Hintergrund-PDF,
 /// Kugelschreiber-, Textmarker- und Bleistiftstriche werden bearbeitbare PencilKit-Striche.
 @MainActor
 enum GoodNotesImporter {
@@ -69,6 +69,10 @@ enum GoodNotesImporter {
         return PKStroke(ink: ink, path: PKStrokePath(controlPoints: controlPoints, creationDate: Date()))
     }
 
+    private static func cgColor(_ c: GoodNotesDocument.Color) -> CGColor {
+        UIColor(red: c.r, green: c.g, blue: c.b, alpha: c.a).cgColor
+    }
+
     /// Ein PDF mit einer Seite je Notizbuchseite: Original-Vorlage (vektoriell) plus Umrissflächen.
     private static func backgroundPDF(_ document: GoodNotesDocument) -> Data {
         var sources: [String: PDFDocument] = [:]
@@ -96,12 +100,26 @@ enum GoodNotesImporter {
                     }
                 }
 
-                guard !page.fills.isEmpty else { continue }
+                guard !page.fills.isEmpty || !page.shapes.isEmpty else { continue }
                 cg.saveGState()
                 cg.scaleBy(x: unit, y: unit)
+                for shape in page.shapes {
+                    if let c = shape.fill {
+                        cg.setFillColor(cgColor(c))
+                        cg.addPath(shape.path)
+                        cg.fillPath(using: .winding)
+                    }
+                    if let c = shape.stroke, shape.width > 0 {
+                        cg.setStrokeColor(cgColor(c))
+                        cg.setLineWidth(shape.width)
+                        cg.setLineCap(.round)
+                        cg.setLineJoin(.round)
+                        cg.addPath(shape.path)
+                        cg.strokePath()
+                    }
+                }
                 for fill in page.fills {
-                    let c = fill.color
-                    cg.setFillColor(UIColor(red: c.r, green: c.g, blue: c.b, alpha: c.a).cgColor)
+                    cg.setFillColor(cgColor(fill.color))
                     cg.addPath(fill.path)
                     cg.fillPath(using: .winding)
                 }

@@ -33,6 +33,14 @@ struct GoodNotesDocument {
         var path: CGPath
     }
 
+    /// Form aus dem Formwerkzeug (Rechteck, Ellipse, Polygon, Linie/Pfeil), wird als Vektor in den Hintergrund gezeichnet.
+    struct Shape {
+        var fill: Color?
+        var stroke: Color?
+        var width: CGFloat
+        var path: CGPath
+    }
+
     struct Background {
         var attachmentPath: String
         var pdfPageIndex: Int   // 0-basiert
@@ -43,6 +51,7 @@ struct GoodNotesDocument {
         var background: Background?
         var strokes: [Stroke] = []
         var fills: [Fill] = []
+        var shapes: [Shape] = []
         var skippedElements = 0
     }
 
@@ -142,11 +151,14 @@ struct GoodNotesDocument {
     private static func parseElements(_ data: Data, into page: inout Page) {
         guard let records = try? ProtoMessage.delimited(data) else { return }
         var header: ProtoMessage?
+        var shapes = ShapeCollector()
+        defer { page.shapes = shapes.finish() }
         for record in records {
             guard let m = try? ProtoMessage(record) else { continue }
             guard let body = m.message(7) else {
-                // Kopf-Datensatz eines Strichs, oder ein anderes Element (Form, Text, Bild).
-                if m.has(1) { header = m } else { page.skippedElements += 1 }
+                // Kopf-Datensatz eines Strichs, oder ein anderes Element (Form, Textfeld, Bild).
+                if m.has(1) { header = m }
+                else if !shapes.add(m) { page.skippedElements += 1 }
                 continue
             }
             defer { header = nil }
@@ -159,11 +171,7 @@ struct GoodNotesDocument {
                 continue
             }
 
-            var color = Color()
-            if let c = body.message(4) {
-                color = Color(r: CGFloat(c.float(1) ?? 0), g: CGFloat(c.float(2) ?? 0),
-                              b: CGFloat(c.float(3) ?? 0), a: CGFloat(c.float(4) ?? 1))
-            }
+            let color = body.message(4).map(Self.color) ?? Color()
             var offset = CGPoint.zero
             if let o = body.message(6) {
                 offset = CGPoint(x: CGFloat(o.float(1) ?? 0), y: CGFloat(o.float(2) ?? 0))
@@ -304,5 +312,131 @@ struct GoodNotesDocument {
             let p = point(a0 + (a1 - a0) * CGFloat(i) / 8)
             if !started { path.move(to: p); started = true } else { path.addLine(to: p) }
         }
+    }
+
+    // MARK: - Formen
+
+    /// Sammelt die Formen einer Seite. Linien können an Formen andocken, darum werden sie erst am Ende aufgelöst.
+    private struct ShapeCollector {
+        private var shapes: [Shape] = []
+        private var frames: [String: CGRect] = [:]
+        private var lines: [(geometry: ProtoMessage, color: Color, width: CGFloat)] = []
+
+        /// Liefert false, wenn der Datensatz ein unbekanntes Element ist.
+        mutating func add(_ m: ProtoMessage) -> Bool {
+            guard let kind = m.fields.first?.number else { return false }
+            switch kind {
+            case 9:
+                if let inner = m.message(9) { addSimpleShape(inner) }
+                return true
+            case 21, 22:
+                guard let inner = m.message(kind) else { return true }
+                if inner.uint(4) == 1 { return true }   // gelöscht
+                switch inner.uint(2) {
+                case 35: addFrameShape(inner)
+                case 31:
+                    if let geometry = inner.message(21) ?? inner.message(20) {
+                        let stroke = inner.message(32)
+                        lines.append((geometry: geometry,
+                                      color: stroke?.message(3)?.message(1).map(GoodNotesDocument.color) ?? Color(),
+                                      width: CGFloat(stroke?.float(1) ?? 1)))
+                    }
+                default:
+                    break   // Textfelder und Bildverweise ohne Inhalt
+                }
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// Ältere Formen: Ellipse (Mitte, Radien, Drehung) oder Rechteck (Mitte, Größe), nur gefüllt.
+        private mutating func addSimpleShape(_ inner: ProtoMessage) {
+            guard inner.uint(14) != 1, let geometry = inner.message(4) else { return }
+            let fill = inner.message(7).map(GoodNotesDocument.color)
+            let path = CGMutablePath()
+            if let e = geometry.message(4) {
+                let c = point(e.message(1)), r = point(e.message(2))
+                let rotation = CGFloat(e.float(3) ?? 0)
+                let transform = CGAffineTransform(translationX: c.x, y: c.y).rotated(by: rotation)
+                path.addEllipse(in: CGRect(x: -r.x, y: -r.y, width: 2 * r.x, height: 2 * r.y), transform: transform)
+            } else if let r = geometry.message(3) {
+                let c = point(r.message(1)), size = point(r.message(2))
+                path.addRect(CGRect(x: c.x - size.x / 2, y: c.y - size.y / 2, width: size.x, height: size.y))
+            } else {
+                return
+            }
+            shapes.append(Shape(fill: fill, stroke: nil, width: 0, path: path))
+        }
+
+        /// Formen mit Rahmen: abgerundetes Rechteck, Ellipse oder Polygon (Punkte relativ zum Rahmen).
+        private mutating func addFrameShape(_ inner: ProtoMessage) {
+            let origin = point(inner.message(20)?.message(1))
+            let size = point(inner.message(21)?.message(2))
+            let frame = CGRect(x: origin.x, y: origin.y, width: size.x, height: size.y)
+            guard frame.width.isFinite, frame.height.isFinite else { return }
+            if let id = inner.string(1) { frames[id] = frame }
+
+            let path = CGMutablePath()
+            let kind = inner.message(22)
+            if let polygon = kind?.message(3) {
+                // Erstes Feld ist ein Container, darin je Punkt ein Feld 1 mit {1: {x, y}}.
+                var container = polygon
+                if let first = polygon.fields.first, case .bytes(let d) = first.value, let m = try? ProtoMessage(d) { container = m }
+                let points = container.all(1).compactMap { value -> CGPoint? in
+                    guard case .bytes(let d) = value, let p = try? ProtoMessage(d) else { return nil }
+                    let n = point(p.message(1))
+                    return CGPoint(x: frame.minX + n.x * frame.width, y: frame.minY + n.y * frame.height)
+                }
+                guard points.count > 1 else { return }
+                path.addLines(between: points)
+                path.closeSubpath()
+            } else if kind?.has(2) == true {
+                path.addEllipse(in: frame)
+            } else {
+                let radius = min(CGFloat(kind?.message(1)?.float(1) ?? 0), frame.width / 2, frame.height / 2)
+                path.addRoundedRect(in: frame, cornerWidth: max(radius, 0), cornerHeight: max(radius, 0))
+            }
+            let fill = inner.message(30)?.message(1)?.message(1).map(GoodNotesDocument.color)
+            let stroke = inner.message(31)
+            shapes.append(Shape(fill: fill,
+                                stroke: stroke?.message(3)?.message(1).map(GoodNotesDocument.color),
+                                width: CGFloat(stroke?.float(1) ?? 1),
+                                path: path))
+        }
+
+        /// Linien und Pfeile: Start, optionaler Kontrollpunkt (quadratische Kurve), Ende.
+        /// Angedockte Enden verweisen auf eine Form und einen Winkel auf deren Rand.
+        mutating func finish() -> [Shape] {
+            for line in lines {
+                guard let start = end(line.geometry.message(1)), let stop = end(line.geometry.message(3)) else { continue }
+                let path = CGMutablePath()
+                path.move(to: start)
+                if line.geometry.has(2) {
+                    path.addQuadCurve(to: stop, control: point(line.geometry.message(2)))
+                } else {
+                    path.addLine(to: stop)
+                }
+                shapes.append(Shape(fill: nil, stroke: line.color, width: line.width, path: path))
+            }
+            lines = []
+            return shapes
+        }
+
+        private func end(_ m: ProtoMessage?) -> CGPoint? {
+            guard let m else { return nil }
+            if let p = m.message(1) { return point(p) }
+            guard let anchor = m.message(2), let id = anchor.message(1)?.string(1), let f = frames[id] else { return nil }
+            let angle = CGFloat(anchor.float(2) ?? 0)
+            return CGPoint(x: f.midX + f.width / 2 * cos(angle), y: f.midY + f.height / 2 * sin(angle))
+        }
+
+        private func point(_ m: ProtoMessage?) -> CGPoint {
+            CGPoint(x: CGFloat(m?.float(1) ?? 0), y: CGFloat(m?.float(2) ?? 0))
+        }
+    }
+
+    static func color(_ c: ProtoMessage) -> Color {
+        Color(r: CGFloat(c.float(1) ?? 0), g: CGFloat(c.float(2) ?? 0), b: CGFloat(c.float(3) ?? 0), a: CGFloat(c.float(4) ?? 1))
     }
 }

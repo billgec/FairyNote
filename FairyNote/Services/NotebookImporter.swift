@@ -39,7 +39,7 @@ enum NotebookImporter {
             let result = try GoodNotesImporter.importNotebook(data, title: title, into: context)
             notebook = result.notebook
             if result.skippedElements > 0 {
-                lastNotice = "„\(title)“: \(result.skippedElements) Elemente (Formen, Textfelder oder Bilder) konnten noch nicht übernommen werden."
+                lastNotice = "„\(title)“: \(result.skippedElements) Elemente konnten nicht übernommen werden."
             }
         } else if ext == "fairynote" {
             notebook = try importArchive(data, into: context)
