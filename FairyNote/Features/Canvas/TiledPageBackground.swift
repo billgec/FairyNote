@@ -22,8 +22,13 @@ struct TiledPageBackground: UIViewRepresentable {
     }
 }
 
+/// CATiledLayer ohne Einblend-Animation der Kacheln.
+final class NoFadeTiledLayer: CATiledLayer {
+    override class func fadeDuration() -> CFTimeInterval { 0 }
+}
+
 final class TiledBackgroundView: UIView {
-    override class var layerClass: AnyClass { CATiledLayer.self }
+    override class var layerClass: AnyClass { NoFadeTiledLayer.self }
 
     /// Wird auch von den Hintergrund-Threads des CATiledLayer gelesen, daher hinter einem Lock.
     private let lock = NSLock()
@@ -59,8 +64,6 @@ final class TiledBackgroundView: UIView {
         let scale = window?.screen.scale ?? 2
         if layer.contentsScale != scale { layer.contentsScale = scale }
     }
-
-    override class func fadeDuration() -> CFTimeInterval { 0 }
 
     // Läuft auf Hintergrund-Threads: nur `layer` und den Kontext verwenden.
     override func draw(_ layer: CALayer, in ctx: CGContext) {
