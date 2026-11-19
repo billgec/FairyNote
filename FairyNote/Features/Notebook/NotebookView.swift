@@ -14,33 +14,22 @@ struct NotebookView: View {
     @State private var exportError: String?
     @State private var showPaper = false
 
-    var body: some View {
-        ScrollView {
-            LazyVStack(spacing: 20) {
-                ForEach(notebook.sortedPages) { page in
-                    VStack(spacing: 8) {
-                        PageView(page: page, paperStyle: notebook.paperStyle, paperColor: notebook.paperColor,
-                                 pdfPage: page.pdfPageIndex.flatMap { pdf?.page(at: $0) }, tools: tools) {
-                            notebook.touch()
-                            AutoSaver.schedule(context)
-                        }
-                        .frame(maxWidth: 900)
-                        .shadow(color: .black.opacity(theme.scheme == .dark ? 0.4 : 0.06), radius: 2, y: 1)
-                        .shadow(color: .black.opacity(theme.scheme == .dark ? 0.5 : 0.10), radius: 18, y: 10)
+    @State private var viewport = PageViewport()
 
-                        pageFooter(page)
-                    }
-                }
-            }
-            .padding(32)
+    var body: some View {
+        VStack(spacing: 0) {
+            ToolBarView(tools: tools)
+                .zIndex(1)
+            pages
         }
-        .scrollDismissesKeyboard(.immediately)
         .background(theme.desk)
-        .safeAreaInset(edge: .top, spacing: 0) { ToolBarView(tools: tools) }
         .toolbarBackground(theme.desk, for: .navigationBar)
         .navigationTitle($notebook.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if viewport.isTransformed {
+                Button("Ansicht zurücksetzen", systemImage: "arrow.counterclockwise") { viewport.reset() }
+            }
             Button("Papier", systemImage: "doc.richtext") { showPaper = true }
             Button("Seite hinzufügen", systemImage: "doc.badge.plus") {
                 notebook.addPage()
@@ -74,13 +63,58 @@ struct NotebookView: View {
         } message: {
             Text("Die Zeichnung auf dieser Seite geht verloren.")
         }
-        .onDisappear { AutoSaver.saveNow(context) }
+        .onDisappear {
+            viewport.detach()
+            AutoSaver.saveNow(context)
+        }
     }
 
-    private func pageFooter(_ page: Page) -> some View {
+    /// Seitenspalte in einer drehbaren, zoombaren ScrollView.
+    private var pages: some View {
+        GeometryReader { geo in
+            let layout = ViewportLayout(size: geo.size)
+            let zoom = viewport.zoom
+            ScrollView([.vertical, .horizontal], showsIndicators: false) {
+                LazyVStack(spacing: PageViewport.pageSpacing * zoom) {
+                    ForEach(notebook.sortedPages) { page in
+                        VStack(spacing: 8 * zoom) {
+                            PageView(page: page, paperStyle: notebook.paperStyle, paperColor: notebook.paperColor,
+                                     pdfPage: page.pdfPageIndex.flatMap { pdf?.page(at: $0) }, tools: tools) {
+                                notebook.touch()
+                                AutoSaver.schedule(context)
+                            }
+                            .frame(width: layout.baseWidth * zoom)
+                            .shadow(color: .black.opacity(theme.scheme == .dark ? 0.4 : 0.06), radius: 2, y: 1)
+                            .shadow(color: .black.opacity(theme.scheme == .dark ? 0.5 : 0.10), radius: 18, y: 10)
+
+                            pageFooter(page, zoom: zoom)
+                                .frame(width: layout.baseWidth * zoom, height: 32 * zoom)
+                        }
+                    }
+                }
+                .padding(PageViewport.pagePadding * zoom)
+                .padding(.horizontal, layout.margin.width)
+                .padding(.vertical, layout.margin.height)
+                .frame(minWidth: layout.diagonal)
+                .background(ScrollViewFinder { viewport.attach(to: $0) })
+            }
+            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+            .scrollDismissesKeyboard(.immediately)
+            .frame(width: layout.diagonal, height: layout.diagonal)
+            .rotationEffect(viewport.displayRotation)
+            .scaleEffect(viewport.liveScale, anchor: viewport.scaleAnchor)
+            .frame(width: geo.size.width, height: geo.size.height)
+            .onAppear { viewport.layout = layout }
+            .onChange(of: layout) { viewport.layout = layout }
+        }
+        .clipped()
+        .ignoresSafeArea()
+    }
+
+    private func pageFooter(_ page: Page, zoom: CGFloat) -> some View {
         HStack {
             Text("Seite \(page.index + 1) von \(notebook.sortedPages.count)")
-                .font(.footnote)
+                .font(.system(size: 13 * zoom))
                 .foregroundStyle(theme.secondaryInk)
             Spacer()
             Menu {
@@ -103,12 +137,11 @@ struct NotebookView: View {
                 .disabled(notebook.sortedPages.count <= 1)
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .font(.title3)
+                    .font(.system(size: 20 * zoom))
                     .foregroundStyle(theme.secondaryInk)
-                    .padding(4)
+                    .padding(4 * zoom)
             }
         }
-        .frame(maxWidth: 900)
     }
 
     private func export(as format: ExportFormat) {
@@ -136,23 +169,26 @@ struct PageView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Inhalt in fester Seitengröße aufbauen und auf die verfügbare Breite skalieren.
+            // Alles wird in der tatsächlichen Anzeigegröße gezeichnet (auch gezoomt scharf),
+            // die Striche bleiben im festen Seitenkoordinatensystem (`Page.canvasWidth`).
+            let scale = geo.size.width / Page.canvasWidth
             ZStack {
                 if let pdfPage {
-                    PDFPageBackground(page: pdfPage)
+                    TiledPageBackground(content: .pdf(pdfPage))
                 } else {
-                    PaperBackground(style: paperStyle, color: paperColor)
+                    let hexes = paperColor.hexes(for: theme)
+                    TiledPageBackground(content: .paper(paperStyle, paper: UIColor(hex: hexes.paper),
+                                                        line: UIColor(hex: hexes.line)))
                 }
                 CanvasView(drawingData: $page.drawingData,
                            tool: tools.pkTool,
                            toolSignature: tools.signature,
                            fingerDrawing: tools.fingerDrawing,
+                           scale: scale,
                            darkPaper: pdfPage == nil && paperColor.isDark(for: theme),
                            onBegin: { tools.activeCanvas = $0 },
                            onChange: onChange)
             }
-            .frame(width: page.canvasSize.width, height: page.canvasSize.height)
-            .scaleEffect(geo.size.width / Page.canvasWidth, anchor: .topLeading)
         }
         .aspectRatio(page.aspectRatio, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 4))
